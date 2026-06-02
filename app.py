@@ -1,6 +1,6 @@
 """
 42 Login Tracker - Auth Server
-Hosted on Render/Railway. Handles the OAuth2 flow and returns the token to the user.
+Hosted on Vercel. Handles the OAuth2 flow and returns the token to the user.
 """
 
 from flask import Flask, redirect, request, render_template_string
@@ -11,7 +11,7 @@ app = Flask(__name__)
 
 CLIENT_ID     = os.environ["CLIENT_ID"]
 CLIENT_SECRET = os.environ["CLIENT_SECRET"]
-REDIRECT_URI  = os.environ["REDIRECT_URI"]   # e.g. https://yourapp.onrender.com/callback
+REDIRECT_URI  = os.environ["REDIRECT_URI"]   # e.g. https://yourapp.vercel.app/callback
 
 AUTH_URL  = "https://api.intra.42.fr/oauth/authorize"
 TOKEN_URL = "https://api.intra.42.fr/oauth/token"
@@ -245,7 +245,3 @@ def callback():
     login_name = me_resp.json().get("login", "unknown") if me_resp.ok else "unknown"
 
     return render_template_string(TOKEN_HTML, token=token, login=login_name)
-
-
-if __name__ == "__main__":
-    app.run(debug=False)
