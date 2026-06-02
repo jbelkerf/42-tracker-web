@@ -1,6 +1,11 @@
 """
 42 Login Tracker - Auth Server
 Hosted on Vercel. Handles the OAuth2 flow and returns the token to the user.
+
+Supports two modes:
+  - Browser mode (no ?callback):  shows the token page for manual copy-paste
+  - CLI mode (?callback=<url>):   redirects back to the local script with the
+                                   token in the query string — no copy-paste needed
 """
 
 from flask import Flask, redirect, request, render_template_string
@@ -173,6 +178,39 @@ TOKEN_HTML = """
 </html>
 """
 
+CLI_SUCCESS_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Done - 42 Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 2rem;
+      text-align: center;
+    }
+    .icon { font-size: 4rem; margin-bottom: 1rem; }
+    h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+    p { color: #aaa; font-size: 1rem; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="icon">✓</div>
+  <h1>Authenticated as {{ login }}</h1>
+  <p>You can close this tab — your terminal is ready.</p>
+</body>
+</html>
+"""
+
 ERROR_HTML = """
 <!DOCTYPE html>
 <html>
@@ -206,19 +244,24 @@ def home():
 
 @app.route("/login")
 def login():
+    # Carry the callback URL through the OAuth state parameter so we can
+    # retrieve it after 42 redirects back to /callback.
+    callback = request.args.get("callback", "")
     params = (
         f"?client_id={CLIENT_ID}"
         f"&redirect_uri={REDIRECT_URI}"
         f"&response_type=code"
         f"&scope=public"
+        f"&state={callback}"   # 42 will echo this back in /callback
     )
     return redirect(AUTH_URL + params)
 
 
 @app.route("/callback")
 def callback():
-    code  = request.args.get("code")
-    error = request.args.get("error")
+    code     = request.args.get("code")
+    error    = request.args.get("error")
+    cli_callback = request.args.get("state", "")   # the localhost URL from the CLI
 
     if error or not code:
         return render_template_string(ERROR_HTML, error=error or "No code received."), 400
@@ -237,11 +280,18 @@ def callback():
 
     token = resp.json().get("access_token")
 
-    # Get the user's login to display on the page
+    # Get the user's login
     me_resp = requests.get(
         "https://api.intra.42.fr/v2/me",
         headers={"Authorization": f"Bearer {token}"}
     )
     login_name = me_resp.json().get("login", "unknown") if me_resp.ok else "unknown"
 
+    # ── CLI mode: redirect back to the local script ────────────────────────────
+    if cli_callback and cli_callback.startswith("http://localhost:"):
+        from urllib.parse import urlencode
+        qs = urlencode({"token": token, "login": login_name})
+        return redirect(f"{cli_callback}?{qs}")
+
+    # ── Browser mode: show the token page (unchanged behaviour) ───────────────
     return render_template_string(TOKEN_HTML, token=token, login=login_name)
